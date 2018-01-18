@@ -1,0 +1,7 @@
+{
+  "name": "tab_control",
+  "description": "Host for tab control",
+  "path": "/home/siikamiika/koodi/firefox-tab-control/tab_control.py",
+  "type": "stdio",
+  "allowed_extensions": [ "tab_control@miika.es" ]
+}
