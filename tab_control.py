@@ -32,8 +32,14 @@ def focus_tab(url=None, title=None):
     tabs = get_message()
 
     if not url and not title:
-        selected_tab = run(['dmenu', '-i', '-l', '10', '-fn', 'Source Han Sans-10'],
-            input='\n'.join([f'{tab["id"]} {tab["title"]} ({tab["url"]})' for tab in tabs]).encode('utf-8'),
+        selected_tab = run(
+            ['dmenu', '-i', '-l', '10', '-fn', 'Source Han Sans-10'],
+            input='\n'.join(['{id} {sound}{title} ({url})'.format(
+                id=tab['id'],
+                sound='[sound]' if tab['audible'] else '',
+                title=tab['title'],
+                url=tab['url']
+            ) for tab in tabs]).encode('utf-8'),
             stdout=PIPE,
         ).stdout
         selected_tab = int(selected_tab.split(b' ')[0])
