@@ -3,7 +3,7 @@
 import json
 import sys
 import struct
-from subprocess import run, call, PIPE
+from subprocess import run, PIPE
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
 from os.path import expanduser
@@ -26,22 +26,21 @@ def send_message(message_content):
     sys.stdout.buffer.flush()
 
 
-# call(['notify-send', '-t', '60000', str(tabs[0])])
 def focus_tab(url=None, title=None):
     send_message({'command': 'get_tabs'})
     tabs = get_message()
 
     if not url and not title:
-        selected_tab = run(
-            ['dmenu', '-i', '-l', '10', '-fn', 'Source Han Sans-10'],
-            input='\n'.join(['{id} {sound}{title} ({url})'.format(
-                id=tab['id'],
-                sound='[sound]' if tab['audible'] else '',
-                title=tab['title'],
-                url=tab['url']
-            ) for tab in tabs]).encode('utf-8'),
-            stdout=PIPE,
-        ).stdout
+        input_lines = []
+        for tab in tabs:
+            tab_id = tab['id']
+            sound = '[sound] ' if tab['audible'] else ''
+            title = tab['title']
+            url = tab['url']
+            input_lines.append(f'{tab_id} {sound}{title} ({url})')
+        cmd = ['dmenu', '-i', '-l', '10', '-fn', 'Source Han Sans-10']
+        dmenu_input = '\n'.join(input_lines).encode('utf-8')
+        selected_tab = run(cmd, input=dmenu_input, stdout=PIPE).stdout
         selected_tab = int(selected_tab.split(b' ')[0])
         selected_tab = next((tab for tab in tabs if tab['id'] == selected_tab), None)
     else:
