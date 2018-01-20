@@ -8,11 +8,21 @@ function getTabs(callback) {
 }
 
 function showPrettyJson(object) {
-    let tabsAsJson = JSON.stringify(object, null, 4);
+    let asJSON = JSON.stringify(object, null, 4);
     let show = document.createElement('pre');
-    show.innerText = ''+tabsAsJson.length +'\n'+tabsAsJson;
+    show.innerText = asJSON;
     document.body.appendChild(show);
 }
 
+function getFocusedWindow(callback) {
+    function onError(error) {
+        console.log(`Error: ${error}`);
+    }
+
+    var querying = browser.windows.getLastFocused({});
+    querying.then(callback, onError);
+}
+
 ////
-getTabs(showPrettyJson);
+// getTabs(showPrettyJson);
+getFocusedWindow(showPrettyJson);

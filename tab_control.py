@@ -9,56 +9,98 @@ from urllib.parse import urlparse, parse_qs
 from os.path import expanduser
 
 
-def get_message():
-    raw_length = sys.stdin.buffer.read(4)
-    if not raw_length:
-        sys.exit(0)
-    message_length = struct.unpack('@I', raw_length)[0]
-    message = sys.stdin.buffer.read(message_length).decode('utf-8')
-    return json.loads(message)
+class FirefoxMessagingHost(object):
+
+    def __init__(self):
+        self.last_url = None
+        self.last_title = None
+        self.last_tab_id = -1
+        self.original_tab_id = -1
 
 
-def send_message(message_content):
-    encoded_content = json.dumps(message_content).encode('utf-8')
-    encoded_length = struct.pack('@I', len(encoded_content))
-    sys.stdout.buffer.write(encoded_length)
-    sys.stdout.buffer.write(encoded_content)
-    sys.stdout.buffer.flush()
+    def _get_message(self):
+        raw_length = sys.stdin.buffer.read(4)
+        if not raw_length:
+            sys.exit(0)
+        message_length = struct.unpack('@I', raw_length)[0]
+        message = sys.stdin.buffer.read(message_length).decode('utf-8')
+        return json.loads(message)
 
 
-def focus_tab(url=None, title=None):
-    send_message({'command': 'get_tabs'})
-    tabs = get_message()
+    def _send_message(self, message_content):
+        encoded_content = json.dumps(message_content).encode('utf-8')
+        encoded_length = struct.pack('@I', len(encoded_content))
+        sys.stdout.buffer.write(encoded_length)
+        sys.stdout.buffer.write(encoded_content)
+        sys.stdout.buffer.flush()
 
-    if not url and not title:
+
+    def _select_tab_dmenu(self, tabs):
         input_lines = []
+
         for tab in tabs:
             tab_id = tab['id']
             sound = '[sound] ' if tab['audible'] else ''
             title = tab['title']
             url = tab['url']
             input_lines.append(f'{tab_id} {sound}{title} ({url})')
+
         cmd = ['dmenu', '-i', '-l', '10', '-fn', 'Source Han Sans-10']
         dmenu_input = '\n'.join(input_lines).encode('utf-8')
         selected_tab = run(cmd, input=dmenu_input, stdout=PIPE).stdout
         selected_tab = int(selected_tab.split(b' ')[0])
-        selected_tab = next((tab for tab in tabs if tab['id'] == selected_tab), None)
-    else:
-        url, title = url or '', title or ''
-        selected_tab = None
-        for tab in tabs:
-            if url in tab['url'] and title in tab['title']:
-                selected_tab = tab
-                break
 
-    if selected_tab:
-        send_message({'command': 'focus_tab', 'data': selected_tab})
+        return next((tab for tab in tabs if tab['id'] == selected_tab), None)
+
+
+    def focus_tab(self, url=None, title=None):
+        self._send_message({'command': 'get_focused_window'})
+        focused_window = self._get_message()
+        self._send_message({'command': 'get_tabs'})
+        tabs = self._get_message()
+        selected_tab = None
+        current_tab = next((tab for tab in tabs if tab['active'] and focused_window['id'] == tab['windowId']), None)
+
+        if current_tab['id'] != self.last_tab_id:
+            self.last_url = None
+            self.last_title = None
+
+        if not url and not title:
+            selected_tab = self._select_tab_dmenu(tabs)
+            if selected_tab:
+                self.last_url = None
+                self.last_title = None
+        else:
+            url, title = url or '', title or ''
+
+            if url == self.last_url and title == self.last_title:
+                selected_tab = next((tab for tab in tabs if tab['id'] == self.original_tab_id), None)
+                self.last_url = None
+                self.last_title = None
+            else:
+                self.last_url = url
+                self.last_title = title
+                self.original_tab_id = current_tab['id']
+
+                for tab in tabs:
+                    if url in tab['url'] and title in tab['title']:
+                        selected_tab = tab
+                        break
+
+        self.last_tab_id = current_tab['id']
+
+        if selected_tab:
+            self._send_message({'command': 'focus_tab', 'data': selected_tab})
+            self.last_tab_id = selected_tab['id']
 
 
 class TabFocusServer(HTTPServer):
 
     def set_auth(self, auth):
         self.auth = auth
+
+    def set_firefox_messaging_host(self, messaging_host):
+        self.messaging_host = messaging_host
 
 
 class TabFocusRequestHandler(BaseHTTPRequestHandler):
@@ -96,7 +138,7 @@ class TabFocusRequestHandler(BaseHTTPRequestHandler):
         if title: title = title[0]
 
         if url.path == '/focus_tab':
-            focus_tab(url=url_query, title=title)
+            self.server.messaging_host.focus_tab(url=url_query, title=title)
             self.respond_ok()
         else:
             self.respond_notfound()
@@ -105,8 +147,10 @@ class TabFocusRequestHandler(BaseHTTPRequestHandler):
 def main():
     with open(expanduser('~/.firefox-tab-control'), 'rb') as f:
         auth = f.read().strip()
+    messaging_host = FirefoxMessagingHost()
     server = TabFocusServer(('127.0.0.1', 9882), TabFocusRequestHandler)
     server.set_auth(auth)
+    server.set_firefox_messaging_host(messaging_host)
     server.serve_forever()
 
 if __name__ == '__main__':

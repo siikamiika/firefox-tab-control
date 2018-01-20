@@ -1,3 +1,12 @@
+function getFocusedWindow(callback) {
+    function onError(error) {
+        console.log(`Error: ${error}`);
+    }
+
+    var querying = browser.windows.getLastFocused({});
+    querying.then(callback, onError);
+}
+
 function getTabs(callback) {
     function onError(error) {
         console.log(`Error: ${error}`);
@@ -17,7 +26,11 @@ function focusTab(tab) {
 var port = browser.runtime.connectNative("tab_control");
 
 port.onMessage.addListener((data) => {
-    if (data.command === 'get_tabs') {
+    if (data.command === 'get_focused_window') {
+        getFocusedWindow((focusedWindow) => {
+            port.postMessage(focusedWindow);
+        })
+    } else if (data.command === 'get_tabs') {
         getTabs((tabs) => {
             port.postMessage(tabs);
         })
