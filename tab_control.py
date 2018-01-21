@@ -9,30 +9,84 @@ from urllib.parse import urlparse, parse_qs
 from os.path import expanduser
 
 
+def get_message():
+    raw_length = sys.stdin.buffer.read(4)
+    if not raw_length:
+        sys.exit(0)
+    message_length = struct.unpack('@I', raw_length)[0]
+    message = sys.stdin.buffer.read(message_length).decode('utf-8')
+    return json.loads(message)
+
+
+def send_message(message_content):
+    encoded_content = json.dumps(message_content).encode('utf-8')
+    encoded_length = struct.pack('@I', len(encoded_content))
+    sys.stdout.buffer.write(encoded_length)
+    sys.stdout.buffer.write(encoded_content)
+    sys.stdout.buffer.flush()
+
+
+def get_current_i3_container(node=None):
+    if not node:
+        node = run(['i3-msg', '-t', 'get_tree'], stdout=PIPE).stdout
+        node = json.loads(node)
+    if node['focused']:
+        return node
+    else:
+        for subnode in node['nodes']:
+            current = get_current_i3_container(subnode)
+            if current:
+                return current
+
+
+def focus_i3_container(container):
+    run(['i3-msg', f'[con_id="{container["id"]}"]', 'focus'], stdout=PIPE)
+
+
+class FocusState(object):
+
+    def __init__(self, first_container=None, first_tab=None, first_url=None, first_title=None):
+        self.first_container = first_container
+        self.first_tab = first_tab
+        self.first_url = first_url
+        self.first_title = first_title
+        self.toggled_tab = None
+
+    def active(self):
+        return bool(self.first_url or self.first_title)
+
+    def _not_from_firefox(self):
+        return (self.first_container and
+            self.first_container['window_properties']['class'] != 'Firefox')
+
+    def toggle_off(self):
+        if self._not_from_firefox():
+            focus_i3_container(self.first_container)
+        else:
+            send_message({'command': 'focus_tab', 'data': self.first_tab})
+        self.first_url, self.first_title = None, None
+
+    def toggle_on(self, tabs):
+        for tab in tabs:
+            if self.first_url in tab['url'] and self.first_title in tab['title']:
+                self.toggled_tab = tab
+                break
+        if not self.toggled_tab:
+            self.first_url, self.first_title = None, None
+        else:
+            send_message({'command': 'focus_tab', 'data': self.toggled_tab})
+
+    def is_toggled_tab(self, url, title, current_tab, current_container):
+        return (
+            (url == self.first_url and title == self.first_title) and
+            (current_container and current_container['window_properties']['class'] == 'Firefox') and
+            (current_tab['id'] == self.toggled_tab['id']))
+
+
 class FirefoxMessagingHost(object):
 
     def __init__(self):
-        self.last_url = None
-        self.last_title = None
-        self.last_tab_id = -1
-        self.original_tab_id = -1
-
-
-    def _get_message(self):
-        raw_length = sys.stdin.buffer.read(4)
-        if not raw_length:
-            sys.exit(0)
-        message_length = struct.unpack('@I', raw_length)[0]
-        message = sys.stdin.buffer.read(message_length).decode('utf-8')
-        return json.loads(message)
-
-
-    def _send_message(self, message_content):
-        encoded_content = json.dumps(message_content).encode('utf-8')
-        encoded_length = struct.pack('@I', len(encoded_content))
-        sys.stdout.buffer.write(encoded_length)
-        sys.stdout.buffer.write(encoded_content)
-        sys.stdout.buffer.flush()
+        self.focus_state = FocusState()
 
 
     def _select_tab_dmenu(self, tabs):
@@ -54,44 +108,25 @@ class FirefoxMessagingHost(object):
 
 
     def focus_tab(self, url=None, title=None):
-        self._send_message({'command': 'get_focused_window'})
-        focused_window = self._get_message()
-        self._send_message({'command': 'get_tabs'})
-        tabs = self._get_message()
-        selected_tab = None
-        current_tab = next((tab for tab in tabs if tab['active'] and focused_window['id'] == tab['windowId']), None)
-
-        if current_tab['id'] != self.last_tab_id:
-            self.last_url = None
-            self.last_title = None
+        send_message({'command': 'get_focused_window'})
+        focused_window = get_message()
+        send_message({'command': 'get_tabs'})
+        tabs = get_message()
 
         if not url and not title:
             selected_tab = self._select_tab_dmenu(tabs)
-            if selected_tab:
-                self.last_url = None
-                self.last_title = None
+            send_message({'command': 'focus_tab', 'data': selected_tab})
         else:
+            current_tab = next((tab for tab in tabs if tab['active'] and focused_window['id'] == tab['windowId']), None)
+            current_container = get_current_i3_container()
             url, title = url or '', title or ''
 
-            if url == self.last_url and title == self.last_title:
-                selected_tab = next((tab for tab in tabs if tab['id'] == self.original_tab_id), None)
-                self.last_url = None
-                self.last_title = None
+            if (not self.focus_state.active() or
+                    not self.focus_state.is_toggled_tab(url, title, current_tab, current_container)):
+                self.focus_state = FocusState(current_container, current_tab, url, title)
+                self.focus_state.toggle_on(tabs)
             else:
-                self.last_url = url
-                self.last_title = title
-                self.original_tab_id = current_tab['id']
-
-                for tab in tabs:
-                    if url in tab['url'] and title in tab['title']:
-                        selected_tab = tab
-                        break
-
-        self.last_tab_id = current_tab['id']
-
-        if selected_tab:
-            self._send_message({'command': 'focus_tab', 'data': selected_tab})
-            self.last_tab_id = selected_tab['id']
+                self.focus_state.toggle_off()
 
 
 class TabFocusServer(HTTPServer):
