@@ -8,4 +8,5 @@
 - [ ] Add toggle to OS windows
 - [ ] Mark current tab or OS window to focus it later (Win+Shift+tab to mark, Win+tab to focus etc.; toggled focusing)
 - [ ] Don't depend on `i3-msg`
-- [ ] MS Windows support
+- [ ] Dmenu fork that lets you cycle between search results with tab/Shift+tab
+- [ ] MS Windows support (AHK)
