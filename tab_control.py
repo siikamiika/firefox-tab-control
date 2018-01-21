@@ -3,7 +3,6 @@
 import json
 import sys
 import struct
-import time
 from subprocess import run, PIPE
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -46,21 +45,15 @@ def focus_i3_container(container):
 
 class FocusState(object):
 
-    def __init__(self, first_container=None, first_tab=None, first_url=None,
-                 first_title=None, timeout=20):
+    def __init__(self, first_container=None, first_tab=None, first_url=None, first_title=None):
         self.first_container = first_container
         self.first_tab = first_tab
         self.first_url = first_url
         self.first_title = first_title
         self.toggled_tab = None
-        self.timeout = timeout
-        self.start_time = time.time()
 
     def active(self):
-        return (
-            bool(self.first_url or self.first_title) and
-            (time.time() - self.start_time < self.timeout) and
-            self._is_toggled_tab())
+        return bool(self.first_url or self.first_title) and self._is_toggled_tab()
 
     def _not_from_firefox(self):
         return (
