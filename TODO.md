@@ -6,6 +6,6 @@
 - [ ] Regex
 - [ ] List OS windows in dmenu
 - [ ] Add toggle to OS windows
-- [ ] Mark current tab or OS window to focus it later (Win+Shift+m to mark, Win+m to focus etc.; toggled focusing AND marking)
+- [ ] Mark current tab or OS window to focus it later (Win+Shift+tab to mark, Win+tab to focus etc.; toggled focusing)
 - [ ] Don't depend on `i3-msg`
 - [ ] MS Windows support
