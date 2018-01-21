@@ -3,6 +3,7 @@
 import json
 import sys
 import struct
+import time
 from subprocess import run, PIPE
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -45,18 +46,25 @@ def focus_i3_container(container):
 
 class FocusState(object):
 
-    def __init__(self, first_container=None, first_tab=None, first_url=None, first_title=None):
+    def __init__(self, first_container=None, first_tab=None, first_url=None,
+                 first_title=None, timeout=20):
         self.first_container = first_container
         self.first_tab = first_tab
         self.first_url = first_url
         self.first_title = first_title
         self.toggled_tab = None
+        self.timeout = timeout
+        self.start_time = time.time()
 
     def active(self):
-        return bool(self.first_url or self.first_title)
+        return (
+            bool(self.first_url or self.first_title) and
+            (time.time() - self.start_time < self.timeout) and
+            self._is_toggled_tab())
 
     def _not_from_firefox(self):
-        return (self.first_container and
+        return (
+            self.first_container and
             self.first_container['window_properties']['class'] != 'Firefox')
 
     def toggle_off(self):
@@ -76,11 +84,18 @@ class FocusState(object):
         else:
             send_message({'command': 'focus_tab', 'data': self.toggled_tab})
 
-    def is_toggled_tab(self, url, title, current_tab, current_container):
+    def set_current_state(self, url, title, tab, container):
+        self.current_url = url
+        self.current_title = title
+        self.current_tab = tab
+        self.current_container = container
+
+    def _is_toggled_tab(self):
         return (
-            (url == self.first_url and title == self.first_title) and
-            (current_container and current_container['window_properties']['class'] == 'Firefox') and
-            (current_tab['id'] == self.toggled_tab['id']))
+            (self.current_url == self.first_url and self.current_title == self.first_title) and
+            (self.current_container and
+             self.current_container['window_properties']['class'] == 'Firefox') and
+            (self.current_tab['id'] == self.toggled_tab['id']))
 
 
 class FirefoxMessagingHost(object):
@@ -120,9 +135,9 @@ class FirefoxMessagingHost(object):
             current_tab = next((tab for tab in tabs if tab['active'] and focused_window['id'] == tab['windowId']), None)
             current_container = get_current_i3_container()
             url, title = url or '', title or ''
+            self.focus_state.set_current_state(url, title, current_tab, current_container)
 
-            if (not self.focus_state.active() or
-                    not self.focus_state.is_toggled_tab(url, title, current_tab, current_container)):
+            if not self.focus_state.active():
                 self.focus_state = FocusState(current_container, current_tab, url, title)
                 self.focus_state.toggle_on(tabs)
             else:
