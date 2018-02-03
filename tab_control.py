@@ -107,7 +107,7 @@ class FirefoxMessagingHost(object):
             url = tab['url']
             input_lines.append(f'{tab_id} {sound}{title} ({url})')
 
-        cmd = ['dmenu', '-i', '-l', '10', '-fn', 'Source Han Sans-10']
+        cmd = ['dmenu', '-i', '-l', '10', '-fn', 'Sarasa Mono J-10']
         dmenu_input = '\n'.join(input_lines).encode('utf-8')
         selected_tab = run(cmd, input=dmenu_input, stdout=PIPE).stdout
         selected_tab = int(selected_tab.split(b' ')[0])
