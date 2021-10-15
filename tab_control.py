@@ -84,7 +84,7 @@ class TabFocusRequestHandler(socketserver.StreamRequestHandler):
 
 
 def main():
-    socket_path = '/tmp/firefox_tab_control.sock'
+    socket_path = f'/run/user/{os.getuid()}/firefox_tab_control.sock'
     with contextlib.suppress(FileNotFoundError):
         os.remove(socket_path)
     server = TabFocusServer(socket_path, TabFocusRequestHandler)
