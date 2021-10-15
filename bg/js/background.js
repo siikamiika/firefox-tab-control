@@ -25,6 +25,7 @@ class NativeMessagingServer {
 class TabControlBackend {
     constructor() {
         this._server = null;
+        this._previousPrefaceCache = {};
     }
 
     start() {
@@ -37,6 +38,7 @@ class TabControlBackend {
         this._server.setCommandHandler('get_focused_window', this._onGetFocusedWindow.bind(this));
         this._server.setCommandHandler('get_tabs', this._onGetTabs.bind(this));
         this._server.setCommandHandler('focus_tab', this._onFocusTab.bind(this));
+        this._server.setCommandHandler('notify_window_focused', this._onNotifyWindowFocused.bind(this));
     }
 
     async _onGetFocusedWindow() {
@@ -47,15 +49,18 @@ class TabControlBackend {
         return await browser.tabs.query({});
     }
 
-    async _onFocusTab({args: {tab}}) {
-        const previousPreface = await this._guessPreviousPreface(tab);
+    async _onFocusTab({id, args: {tab}}) {
+        this._previousPrefaceCache[id] = await this._guessPreviousPreface(tab);
         await browser.windows.update(tab.windowId, {titlePreface: `focus_window_id:${tab.windowId} `});
         this._focusTab(tab);
-        setTimeout(
-            () => browser.windows.update(tab.windowId, {titlePreface: previousPreface}),
-            1000
-        );
         return {ok: true};
+    }
+
+    async _onNotifyWindowFocused({args: {id, windowId}}) {
+        const titlePreface = this._previousPrefaceCache[id];
+        if (typeof titlePreface === 'undefined') { return; }
+        delete this._previousPrefaceCache[id];
+        browser.windows.update(windowId, {titlePreface});
     }
 
     _focusTab(tab) {

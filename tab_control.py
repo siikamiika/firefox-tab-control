@@ -97,7 +97,12 @@ class FirefoxTabController(object):
                 self._commander.command('focus_tab', args={'tab': selected_tab}, cb=on_focused)
         def on_focused(data):
             if data['results']['ok']:
-                self._sway_focus_firefox_window(selected_tab['windowId'])
+                window_id = selected_tab['windowId']
+                self._sway_focus_firefox_window(window_id)
+                self._commander.command(
+                    'notify_window_focused',
+                    args={'id': data['id'],'windowId': window_id}
+                )
         self._commander.command('get_tabs', cb=on_tabs)
 
 
