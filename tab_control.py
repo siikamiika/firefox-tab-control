@@ -29,7 +29,7 @@ def send_message(message_content):
 def sway_focus_firefox_window(firefox_window_id):
     # hack
     patt = f'focus_window_id:{firefox_window_id}'
-    run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="^{patt}"]', 'focus'], stdout=PIPE)
+    run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="^{patt} "]', 'focus'], stdout=PIPE)
 
 
 class FirefoxMessagingHost(object):
