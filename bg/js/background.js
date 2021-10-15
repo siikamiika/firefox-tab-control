@@ -1,20 +1,3 @@
-function focusTab(tab) {
-    browser.windows.update(tab.windowId, {focused: true});
-    browser.tabs.update(tab.id, {active: true});
-}
-
-async function guessPreviousPreface(tab) {
-    const {windowId, title: tabTitle} = tab;
-    const {title: windowTitle} = await browser.windows.get(windowId);
-    let tabNameStart = windowTitle.indexOf(tabTitle);
-    if (tabNameStart < 0) {
-        tabNameStart = 0;
-    }
-    return windowTitle.substr(0, tabNameStart);
-}
-
-// -------------------------------------------------------
-
 class NativeMessagingServer {
     constructor(name) {
         this._name = name;
@@ -39,21 +22,57 @@ class NativeMessagingServer {
     }
 }
 
-const server = new NativeMessagingServer('tab_control');
-server.setCommandHandler('get_focused_window', async () => {
-    return await browser.windows.getLastFocused({});
-});
-server.setCommandHandler('get_tabs', async () => {
-    return await browser.tabs.query({});
-});
-server.setCommandHandler('focus_tab', async ({args: {tab}}) => {
-    const previousPreface = await guessPreviousPreface(tab);
-    await browser.windows.update(tab.windowId, {titlePreface: `focus_window_id:${tab.windowId} `});
-    focusTab(tab);
-    setTimeout(
-        () => browser.windows.update(tab.windowId, {titlePreface: previousPreface}),
-        1000
-    );
-    return {ok: true};
-});
-server.start();
+class TabControlBackend {
+    constructor() {
+        this._server = null;
+    }
+
+    start() {
+        this._server = new NativeMessagingServer('tab_control');
+        this._setHandlers();
+        this._server.start();
+    }
+
+    _setHandlers() {
+        this._server.setCommandHandler('get_focused_window', this._onGetFocusedWindow.bind(this));
+        this._server.setCommandHandler('get_tabs', this._onGetTabs.bind(this));
+        this._server.setCommandHandler('focus_tab', this._onFocusTab.bind(this));
+    }
+
+    async _onGetFocusedWindow() {
+        return await browser.windows.getLastFocused({});
+    }
+
+    async _onGetTabs() {
+        return await browser.tabs.query({});
+    }
+
+    async _onFocusTab({args: {tab}}) {
+        const previousPreface = await this._guessPreviousPreface(tab);
+        await browser.windows.update(tab.windowId, {titlePreface: `focus_window_id:${tab.windowId} `});
+        this._focusTab(tab);
+        setTimeout(
+            () => browser.windows.update(tab.windowId, {titlePreface: previousPreface}),
+            1000
+        );
+        return {ok: true};
+    }
+
+    _focusTab(tab) {
+        browser.windows.update(tab.windowId, {focused: true});
+        browser.tabs.update(tab.id, {active: true});
+    }
+
+    async _guessPreviousPreface(tab) {
+        const {windowId, title: tabTitle} = tab;
+        const {title: windowTitle} = await browser.windows.get(windowId);
+        let tabNameStart = windowTitle.indexOf(tabTitle);
+        if (tabNameStart < 0) {
+            tabNameStart = 0;
+        }
+        return windowTitle.substr(0, tabNameStart);
+    }
+}
+
+const backend = new TabControlBackend();
+backend.start();
