@@ -50,7 +50,7 @@ class TabControlBackend {
     }
 
     async _onFocusTab({id, args: {tab}}) {
-        this._previousPrefaceCache[id] = await this._guessPreviousPreface(tab);
+        this._previousPrefaceCache[id] = await this._guessPreviousPreface(tab.windowId);
         await browser.windows.update(tab.windowId, {titlePreface: `focus_window_id:${tab.windowId} `});
         this._focusTab(tab);
         return {ok: true};
@@ -68,8 +68,8 @@ class TabControlBackend {
         browser.tabs.update(tab.id, {active: true});
     }
 
-    async _guessPreviousPreface(tab) {
-        const {windowId, title: tabTitle} = tab;
+    async _guessPreviousPreface(windowId) {
+        const {title: tabTitle} = (await browser.tabs.query({windowId, active: true}))[0];
         const {title: windowTitle} = await browser.windows.get(windowId);
         let tabNameStart = windowTitle.indexOf(tabTitle);
         if (tabNameStart < 0) {
