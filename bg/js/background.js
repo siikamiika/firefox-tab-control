@@ -37,5 +37,6 @@ port.onMessage.addListener(async (data) => {
     } else if (data.command === 'focus_tab') {
         await browser.windows.update(data.data.windowId, {titlePreface: `focus_window_id:${data.data.windowId} `});
         focusTab(data.data);
+        port.postMessage({ok: true});
     }
 });

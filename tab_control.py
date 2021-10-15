@@ -1,7 +1,6 @@
 #!/usr/bin/python3 -u
 
 import json
-import time
 import sys
 import struct
 from subprocess import run, PIPE
@@ -63,8 +62,8 @@ class FirefoxMessagingHost(object):
 
         selected_tab = self._select_tab(tabs)
         send_message({'command': 'focus_tab', 'data': selected_tab})
-        time.sleep(0.3)
-        sway_focus_firefox_window(selected_tab['windowId'])
+        if get_message()['ok']:
+            sway_focus_firefox_window(selected_tab['windowId'])
 
 
 class TabFocusServer(HTTPServer):
