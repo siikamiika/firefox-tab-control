@@ -3,10 +3,10 @@
 import json
 import sys
 import struct
+import os
+import contextlib
+import socketserver
 from subprocess import run, PIPE
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse
-from os.path import expanduser
 
 
 def get_message():
@@ -66,57 +66,29 @@ class FirefoxMessagingHost(object):
             sway_focus_firefox_window(selected_tab['windowId'])
 
 
-class TabFocusServer(HTTPServer):
+class TabFocusServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
 
-    def set_auth(self, auth):
-        self.auth = auth
+    def server_bind(self):
+        os.fchmod(self.socket.fileno(), 0o600)
+        super().server_bind()
 
     def set_firefox_messaging_host(self, messaging_host):
         self.messaging_host = messaging_host
 
 
-class TabFocusRequestHandler(BaseHTTPRequestHandler):
+class TabFocusRequestHandler(socketserver.StreamRequestHandler):
 
-    protocol_version = 'HTTP/1.1'
-
-    def log_message(self, fmt, *args):
-        pass
-
-    def respond_ok(self, data=b'', content_type='text/html; charset=utf-8', age=0):
-        self.send_response(200)
-        self.send_header('Cache-Control', 'public, max-age={}'.format(age))
-        self.send_header('Content-Type', content_type)
-        self.send_header('Content-Length', len(data))
-        self.end_headers()
-        self.wfile.write(data)
-
-    def respond_notfound(self, data='404'.encode()):
-        self.send_response(404)
-        self.send_header('Content-Type', 'text/plain')
-        self.send_header('Content-Length', len(data))
-        self.end_headers()
-        self.wfile.write(data)
-
-    def do_GET(self):
-        if self.headers.get('auth').strip().encode('utf-8') != self.server.auth:
-            return self.respond_notfound()
-
-        url = urlparse(self.path)
-
-        if url.path == '/focus_tab':
-            self.server.messaging_host.focus_tab()
-            self.respond_ok()
-        else:
-            self.respond_notfound()
+    def handle(self):
+        # don't read or write anything, just do the thing
+        self.server.messaging_host.focus_tab()
 
 
 def main():
-    with open(expanduser('~/.firefox-tab-control'), 'rb') as f:
-        auth = f.read().strip()
-    messaging_host = FirefoxMessagingHost()
-    server = TabFocusServer(('127.0.0.1', 9882), TabFocusRequestHandler)
-    server.set_auth(auth)
-    server.set_firefox_messaging_host(messaging_host)
+    socket_path = '/tmp/firefox_tab_control.sock'
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(socket_path)
+    server = TabFocusServer(socket_path, TabFocusRequestHandler)
+    server.set_firefox_messaging_host(FirefoxMessagingHost())
     server.serve_forever()
 
 if __name__ == '__main__':
