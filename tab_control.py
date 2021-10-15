@@ -6,33 +6,63 @@ import struct
 import os
 import contextlib
 import socketserver
+import threading
+import traceback
 from subprocess import run, PIPE
 
 
-def get_message():
-    raw_length = sys.stdin.buffer.read(4)
-    if not raw_length:
-        sys.exit(0)
-    message_length = struct.unpack('@I', raw_length)[0]
-    message = sys.stdin.buffer.read(message_length).decode('utf-8')
-    return json.loads(message)
+class FirefoxStandardStreamCommander:
+    def __init__(self, input_stream, output_stream):
+        self._input_stream = input_stream
+        self._output_stream = output_stream
+        self._seq = 0
+        self._listeners = {}
+        threading.Thread(target=self._handle_messages).start()
 
 
-def send_message(message_content):
-    encoded_content = json.dumps(message_content).encode('utf-8')
-    encoded_length = struct.pack('@I', len(encoded_content))
-    sys.stdout.buffer.write(encoded_length)
-    sys.stdout.buffer.write(encoded_content)
-    sys.stdout.buffer.flush()
+    def command(self, command, args=None, cb=None):
+        seq = self._seq
+        self._seq += 1
+        self._listeners[seq] = cb or (lambda m: None)
+        self._send_message({'id': seq, 'command': command, 'args': args or {}})
 
 
-def sway_focus_firefox_window(firefox_window_id):
-    # hack
-    patt = f'focus_window_id:{firefox_window_id}'
-    run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="^{patt} "]', 'focus'], stdout=PIPE)
+    def _handle_messages(self):
+        while True:
+            message = self._get_message()
+            threading.Thread(target=self._handle_message, args=(message,)).start()
 
 
-class FirefoxMessagingHost(object):
+    def _handle_message(self, message):
+        try:
+            self._listeners[message['id']](message)
+        except Exception as e:
+            run(['notify-send', 'firefox-tab-control exception', traceback.format_exc()])
+        finally:
+            del self._listeners[message['id']]
+
+
+    def _get_message(self):
+        raw_length = self._input_stream.read(4)
+        if not raw_length:
+            sys.exit(0)
+        message_length = struct.unpack('@I', raw_length)[0]
+        message = self._input_stream.read(message_length).decode('utf-8')
+        return json.loads(message)
+
+
+    def _send_message(self, message_content):
+        encoded_content = json.dumps(message_content).encode('utf-8')
+        encoded_length = struct.pack('@I', len(encoded_content))
+        self._output_stream.write(encoded_length)
+        self._output_stream.write(encoded_content)
+        self._output_stream.flush()
+
+
+class FirefoxTabController(object):
+
+    def __init__(self, commander):
+        self._commander = commander
 
     def _select_tab(self, tabs):
         input_lines = []
@@ -49,21 +79,32 @@ class FirefoxMessagingHost(object):
         run("alacritty --title=launcher -e bash -c 'cat /tmp/select_tab_input | fzf --layout=reverse > /tmp/select_tab_output'", shell=True)
         with open('/tmp/select_tab_output') as f:
             selected_tab = f.read()
-        selected_tab = int(selected_tab.split(' ')[0])
-
-        return next((tab for tab in tabs if tab['id'] == selected_tab), None)
+        try:
+            tab_id = int(selected_tab.split(' ')[0])
+            return next((tab for tab in tabs if tab['id'] == tab_id), None)
+        except ValueError:
+            return None
 
 
     def focus_tab(self):
-        send_message({'command': 'get_focused_window'})
-        focused_window = get_message()
-        send_message({'command': 'get_tabs'})
-        tabs = get_message()
+        # TODO async
+        selected_tab = None
+        def on_tabs(data):
+            nonlocal selected_tab
+            tabs = data['results']
+            selected_tab = self._select_tab(tabs)
+            if selected_tab:
+                self._commander.command('focus_tab', args={'tab': selected_tab}, cb=on_focused)
+        def on_focused(data):
+            if data['results']['ok']:
+                self._sway_focus_firefox_window(selected_tab['windowId'])
+        self._commander.command('get_tabs', cb=on_tabs)
 
-        selected_tab = self._select_tab(tabs)
-        send_message({'command': 'focus_tab', 'data': selected_tab})
-        if get_message()['ok']:
-            sway_focus_firefox_window(selected_tab['windowId'])
+
+    def _sway_focus_firefox_window(self, firefox_window_id):
+        # hack
+        patt = f'focus_window_id:{firefox_window_id}'
+        run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="^{patt} "]', 'focus'], stdout=PIPE)
 
 
 class TabFocusServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
@@ -72,23 +113,24 @@ class TabFocusServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer)
         os.fchmod(self.socket.fileno(), 0o600)
         super().server_bind()
 
-    def set_firefox_messaging_host(self, messaging_host):
-        self.messaging_host = messaging_host
+    def set_firefox_tab_controller(self, tab_controller):
+        self.tab_controller = tab_controller
 
 
 class TabFocusRequestHandler(socketserver.StreamRequestHandler):
 
     def handle(self):
         # don't read or write anything, just do the thing
-        self.server.messaging_host.focus_tab()
+        self.server.tab_controller.focus_tab()
 
 
 def main():
     socket_path = f'/run/user/{os.getuid()}/firefox_tab_control.sock'
     with contextlib.suppress(FileNotFoundError):
         os.remove(socket_path)
+    commander = FirefoxStandardStreamCommander(sys.stdin.buffer, sys.stdout.buffer)
     server = TabFocusServer(socket_path, TabFocusRequestHandler)
-    server.set_firefox_messaging_host(FirefoxMessagingHost())
+    server.set_firefox_tab_controller(FirefoxTabController(commander))
     server.serve_forever()
 
 if __name__ == '__main__':
