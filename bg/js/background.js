@@ -21,6 +21,16 @@ function focusTab(tab) {
     browser.tabs.update(tab.id, {active: true});
 }
 
+async function guessPreviousPreface(tab) {
+    const {windowId, title: tabTitle} = tab;
+    const {title: windowTitle} = await browser.windows.get(windowId);
+    let tabNameStart = windowTitle.indexOf(tabTitle);
+    if (tabNameStart < 0) {
+        tabNameStart = 0;
+    }
+    return windowTitle.substr(0, tabNameStart);
+}
+
 // -------------------------------------------------------
 
 var port = browser.runtime.connectNative("tab_control");
@@ -35,8 +45,14 @@ port.onMessage.addListener(async (data) => {
             port.postMessage(tabs);
         })
     } else if (data.command === 'focus_tab') {
-        await browser.windows.update(data.data.windowId, {titlePreface: `focus_window_id:${data.data.windowId} `});
+        const tab = data.data;
+        const previousPreface = await guessPreviousPreface(tab);
+        await browser.windows.update(tab.windowId, {titlePreface: `focus_window_id:${tab.windowId} `});
         focusTab(data.data);
         port.postMessage({ok: true});
+        setTimeout(
+            () => browser.windows.update(tab.windowId, {titlePreface: previousPreface}),
+            1000
+        );
     }
 });
