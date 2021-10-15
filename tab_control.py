@@ -1,7 +1,6 @@
 #!/usr/bin/python3 -u
 
 import json
-import re
 import time
 import sys
 import struct
@@ -28,10 +27,10 @@ def send_message(message_content):
     sys.stdout.buffer.flush()
 
 
-def focus_sway_container(container):
+def sway_focus_firefox_window(firefox_window_id):
     # hack
-    title = re.escape(container['title'])
-    run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="(?:\\[ws\\d\\]\\s*)?{title} — Mozilla Firefox"]', 'focus'], stdout=PIPE)
+    patt = f'focus_window_id:{firefox_window_id}'
+    run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="^{patt}"]', 'focus'], stdout=PIPE)
 
 
 class FirefoxMessagingHost(object):
@@ -65,7 +64,7 @@ class FirefoxMessagingHost(object):
         selected_tab = self._select_tab(tabs)
         send_message({'command': 'focus_tab', 'data': selected_tab})
         time.sleep(0.3)
-        focus_sway_container({'title': selected_tab['title']})
+        sway_focus_firefox_window(selected_tab['windowId'])
 
 
 class TabFocusServer(HTTPServer):

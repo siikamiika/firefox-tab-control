@@ -25,7 +25,7 @@ function focusTab(tab) {
 
 var port = browser.runtime.connectNative("tab_control");
 
-port.onMessage.addListener((data) => {
+port.onMessage.addListener(async (data) => {
     if (data.command === 'get_focused_window') {
         getFocusedWindow((focusedWindow) => {
             port.postMessage(focusedWindow);
@@ -35,6 +35,7 @@ port.onMessage.addListener((data) => {
             port.postMessage(tabs);
         })
     } else if (data.command === 'focus_tab') {
+        await browser.windows.update(data.data.windowId, {titlePreface: `focus_window_id:${data.data.windowId} `});
         focusTab(data.data);
     }
 });

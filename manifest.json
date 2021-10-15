@@ -11,7 +11,8 @@
     },
     "permissions": [
         "nativeMessaging",
-        "tabs"
+        "tabs",
+        "sessions"
     ],
     "applications": {
         "gecko": {
