@@ -75,7 +75,7 @@ class FirefoxTabController(object):
             url = tab['url']
             input_lines.append(f'{tab_id} {sound}{title} ({url})')
 
-        p = subprocess.Popen(os.getenv('DMENU').split(), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
         p.stdin.write(('\n'.join(input_lines) + '\n').encode('utf-8'))
         p.stdin.close()
         selected_tab = p.stdout.read()
