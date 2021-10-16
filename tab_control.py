@@ -9,7 +9,7 @@ import socketserver
 import threading
 import traceback
 import uuid
-from subprocess import run, PIPE
+import subprocess
 
 
 class FirefoxStandardStreamCommander:
@@ -38,7 +38,7 @@ class FirefoxStandardStreamCommander:
         try:
             self._listeners[message['id']](message)
         except Exception as e:
-            run(['notify-send', 'firefox-tab-control exception', traceback.format_exc()])
+            subprocess.run(['notify-send', 'firefox-tab-control exception', traceback.format_exc()])
         finally:
             del self._listeners[message['id']]
 
@@ -75,13 +75,13 @@ class FirefoxTabController(object):
             url = tab['url']
             input_lines.append(f'{tab_id} {sound}{title} ({url})')
 
-        with open('/tmp/select_tab_input', 'wb') as f:
-            f.write('\n'.join(input_lines).encode('utf-8'))
-        run("alacritty --title=launcher -e bash -c 'cat /tmp/select_tab_input | fzf --layout=reverse > /tmp/select_tab_output'", shell=True)
-        with open('/tmp/select_tab_output') as f:
-            selected_tab = f.read()
+        p = subprocess.Popen(['fzf-launcher'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        p.stdin.write(('\n'.join(input_lines) + '\n').encode('utf-8'))
+        p.stdin.close()
+        selected_tab = p.stdout.read()
+        p.wait()
         try:
-            tab_id = int(selected_tab.split(' ')[0])
+            tab_id = int(selected_tab.split(b' ')[0])
             return next((tab for tab in tabs if tab['id'] == tab_id), None)
         except ValueError:
             return None
@@ -121,7 +121,7 @@ class FirefoxTabController(object):
     def _sway_focus_firefox_window(self, firefox_window_id, random_prefix):
         # hack
         patt = f'{random_prefix}:{firefox_window_id}'
-        run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="{patt} "]', 'focus'], stdout=PIPE)
+        subprocess.run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="{patt} "]', 'focus'], stdout=subprocess.DEVNULL)
 
 
 class TabFocusServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
