@@ -120,7 +120,7 @@ class FirefoxTabController(object):
     def _sway_focus_firefox_window(self, firefox_window_id, random_prefix):
         # hack
         patt = f'{random_prefix}:{firefox_window_id}'
-        run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="^{patt} "]', 'focus'], stdout=PIPE)
+        run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="{patt} "]', 'focus'], stdout=PIPE)
 
 
 class TabFocusServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
