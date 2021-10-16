@@ -73,7 +73,7 @@ class FirefoxTabController(object):
             sound = '[sound] ' if tab['audible'] else ''
             title = tab['title']
             url = tab['url']
-            input_lines.append(f'{tab_id} {sound}{title} ({url})')
+            input_lines.append(f'{sound}{title} ({url})\t\t\t\t\t\t\t\t\t\t{tab_id}')
 
         p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
         p.stdin.write(('\n'.join(input_lines) + '\n').encode('utf-8'))
@@ -81,7 +81,7 @@ class FirefoxTabController(object):
         selected_tab = p.stdout.read()
         p.wait()
         try:
-            tab_id = int(selected_tab.split(b' ')[0])
+            tab_id = int(selected_tab.split(b'\t')[-1])
             return next((tab for tab in tabs if tab['id'] == tab_id), None)
         except ValueError:
             return None
