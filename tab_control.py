@@ -89,24 +89,25 @@ class FirefoxTabController(object):
 
     def focus_tab(self):
         # TODO async
-        selected_tab = None
-        random_prefix = None
-        def on_tabs(data):
-            nonlocal selected_tab, random_prefix
+        def get_tabs():
+            self._commander.command('get_tabs', cb=select_tab)
+        def select_tab(data):
             tabs = data['results']
             selected_tab = self._select_tab(tabs)
             if selected_tab:
-                random_prefix = uuid.uuid4().hex
-                self._commander.command(
-                    'focus_tab',
-                    args={
-                        'windowId': selected_tab['windowId'],
-                        'tabId': selected_tab['id'],
-                        'randomPrefix': random_prefix
-                    },
-                    cb=on_focused
-                )
-        def on_focused(data):
+                focus_tab(selected_tab)
+        def focus_tab(selected_tab):
+            random_prefix = uuid.uuid4().hex
+            self._commander.command(
+                'focus_tab',
+                args={
+                    'windowId': selected_tab['windowId'],
+                    'tabId': selected_tab['id'],
+                    'randomPrefix': random_prefix
+                },
+                cb=lambda d: notify_finished(selected_tab, random_prefix, d)
+            )
+        def notify_finished(selected_tab, random_prefix, data):
             if data['results']['ok']:
                 window_id = selected_tab['windowId']
                 self._sway_focus_firefox_window(window_id, random_prefix)
@@ -114,7 +115,7 @@ class FirefoxTabController(object):
                     'notify_window_focused',
                     args={'id': data['id'],'windowId': window_id}
                 )
-        self._commander.command('get_tabs', cb=on_tabs)
+        get_tabs()
 
 
     def _sway_focus_firefox_window(self, firefox_window_id, random_prefix):
