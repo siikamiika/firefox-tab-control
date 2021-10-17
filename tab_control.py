@@ -4,7 +4,6 @@ import json
 import sys
 import struct
 import os
-import time
 import contextlib
 import socketserver
 import threading
@@ -77,20 +76,7 @@ class FirefoxTabController(object):
         self._commander = commander
 
         self._browser_window_map = {}
-        self._update_all_windows()
-        self._commander.command('subscribe_new_window', cb=self._on_new_window)
         self._commander.command('subscribe_close_window', cb=self._on_close_window)
-
-    def _update_all_windows(self):
-        def update_window_map(data):
-            for window in data['results']:
-                self._identify_window(window['id'])
-        self._commander.command('get_windows', cb=update_window_map)
-
-    def _on_new_window(self, data):
-        time.sleep(0.5)
-        window = data['results']
-        self._identify_window(window['id'])
 
     def _on_close_window(self, data):
         window = data['results']
