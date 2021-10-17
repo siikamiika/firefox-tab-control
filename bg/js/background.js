@@ -2,7 +2,7 @@ class NativeMessagingServer {
     constructor(name) {
         this._name = name;
         this._port = null;
-        this._command_handlers = {};
+        this._handlers = {};
     }
 
     start() {
@@ -10,15 +10,24 @@ class NativeMessagingServer {
         this._port.onMessage.addListener(this._onMessage.bind(this));
     }
 
-    setCommandHandler(name, cb) {
-        this._command_handlers[name] = cb;
+    setCommandHandler(name, handler) {
+        this._handlers[name] = {type: 'command', handler};
+    }
+
+    setSubscribeHandler(name, handler) {
+        this._handlers[name] = {type: 'subscribe', handler};
     }
 
     async _onMessage(data) {
-        const handler = this._command_handlers[data.command];
-        if (!handler) { return; }
-        const results = await handler(data);
-        this._port.postMessage({id: data.id, results});
+        if (!this._handlers[data.command]) { return; }
+        const {type, handler} = this._handlers[data.command];
+        if (type === 'command') {
+            const results = await handler(data);
+            this._port.postMessage({id: data.id, type: 'results', results});
+        } else if (type === 'subscribe') {
+            const postMessageChannel = (results) => this._port.postMessage({id: data.id, type: 'update', results});
+            handler(data, postMessageChannel);
+        }
     }
 }
 
@@ -35,10 +44,19 @@ class TabControlBackend {
     }
 
     _setHandlers() {
+        // commands
+        this._server.setCommandHandler('get_windows', this._onGetWindows.bind(this));
         this._server.setCommandHandler('get_focused_window', this._onGetFocusedWindow.bind(this));
         this._server.setCommandHandler('get_tabs', this._onGetTabs.bind(this));
         this._server.setCommandHandler('focus_tab', this._onFocusTab.bind(this));
         this._server.setCommandHandler('identify_window', this._onIdentifyWindow.bind(this));
+        // subscriptions
+        this._server.setSubscribeHandler('subscribe_new_window', this._onSubscribeNewWindow.bind(this));
+        this._server.setSubscribeHandler('subscribe_close_window', this._onSubscribeCloseWindow.bind(this));
+    }
+
+    async _onGetWindows() {
+        return await browser.windows.getAll();
     }
 
     async _onGetFocusedWindow() {
@@ -92,6 +110,14 @@ class TabControlBackend {
             tabNameStart = 0;
         }
         return windowTitle.substr(0, tabNameStart);
+    }
+
+    _onSubscribeNewWindow(_, postMessageChannel) {
+        browser.windows.onCreated.addListener(postMessageChannel);
+    }
+
+    _onSubscribeCloseWindow(_, postMessageChannel) {
+        browser.windows.onRemoved.addListener((id) => postMessageChannel({id}));
     }
 }
 
