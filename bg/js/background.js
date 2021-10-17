@@ -38,8 +38,7 @@ class TabControlBackend {
         this._server.setCommandHandler('get_focused_window', this._onGetFocusedWindow.bind(this));
         this._server.setCommandHandler('get_tabs', this._onGetTabs.bind(this));
         this._server.setCommandHandler('focus_tab', this._onFocusTab.bind(this));
-        this._server.setCommandHandler('show_window_id_in_title', this._onShowWindowIdInTitle.bind(this));
-        this._server.setCommandHandler('remove_window_id_from_title', this._onRemoveWindowIdFromTitle.bind(this));
+        this._server.setCommandHandler('identify_window', this._onIdentifyWindow.bind(this));
     }
 
     async _onGetFocusedWindow() {
@@ -56,16 +55,25 @@ class TabControlBackend {
         return {ok: true};
     }
 
-    async _onShowWindowIdInTitle({args: {windowId}}) {
+    async _onIdentifyWindow({args: {windowId, on}}) {
+        // off
+        if (!on) {
+            if (this._titlePrefaceCache[windowId]) {
+                const {previousPreface} = this._titlePrefaceCache[windowId];
+                await browser.windows.update(windowId, {titlePreface: previousPreface});
+                delete this._titlePrefaceCache[windowId];
+            }
+            return {identifier: null};
+        }
+        // on
         if (this._titlePrefaceCache[windowId]) {
             const {previousPreface, identifier} = this._titlePrefaceCache[windowId];
             await browser.windows.update(windowId, {titlePreface: `${previousPreface}${identifier} `});
             return {identifier};
         }
-        const randomString = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+        const identifier = Array.from(crypto.getRandomValues(new Uint8Array(16)))
             .map((v) => v.toString(16).padStart(2, '0'))
             .join('');
-        const identifier = `${randomString}:${windowId}`;
         let previousPreface = await this._guessPreviousPreface(windowId);
         // some other call got here first, give up
         if (this._titlePrefaceCache[windowId]) {
@@ -74,15 +82,6 @@ class TabControlBackend {
         this._titlePrefaceCache[windowId] = {previousPreface, identifier};
         await browser.windows.update(windowId, {titlePreface: `${previousPreface}${identifier} `});
         return {identifier};
-    }
-
-    async _onRemoveWindowIdFromTitle({args: {windowId}}) {
-        if (this._titlePrefaceCache[windowId]) {
-            const {previousPreface} = this._titlePrefaceCache[windowId];
-            await browser.windows.update(windowId, {titlePreface: previousPreface});
-            delete this._titlePrefaceCache[windowId];
-        }
-        return {ok: true};
     }
 
     async _guessPreviousPreface(windowId) {

@@ -94,11 +94,11 @@ class FirefoxTabController(object):
             tabs = data['results']
             selected_tab = self._select_tab(tabs)
             if selected_tab:
-                show_window_id_in_title(selected_tab)
-        def show_window_id_in_title(selected_tab):
+                identify_window(selected_tab)
+        def identify_window(selected_tab):
             self._commander.command(
-                'show_window_id_in_title',
-                args=selected_tab,
+                'identify_window',
+                args={'windowId': selected_tab['windowId'], 'on': True},
                 cb=lambda d: focus_tab(d, selected_tab)
             )
         def focus_tab(data, selected_tab):
@@ -106,8 +106,8 @@ class FirefoxTabController(object):
             if identifier:
                 self._sway_focus_firefox_window(identifier)
                 self._commander.command(
-                    'remove_window_id_from_title',
-                    args=selected_tab
+                    'identify_window',
+                    args={'windowId': selected_tab['windowId'], 'on': False}
                 )
                 self._commander.command(
                     'focus_tab',
