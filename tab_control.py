@@ -95,7 +95,8 @@ class FirefoxTabController(object):
         def find_title_identifier(data):
             identifier = data['results']['identifier']
             con_id = self._sway_get_con_id_for_title_identifier(identifier)
-            self._browser_window_map[window_id] = {'con_id': con_id}
+            if con_id is not None:
+                self._browser_window_map[window_id] = {'con_id': con_id}
             cleanup()
         def cleanup():
             self._commander.command(
@@ -107,12 +108,26 @@ class FirefoxTabController(object):
     def _select_tab(self, tabs):
         input_lines = []
 
-        for tab in tabs:
+        # TODO background
+        workspace_by_window_id = self._sway_get_firefox_workspaces_by_window_id()
+
+        def tab_sort_key(tab):
+            win_id = tab['windowId']
+            return workspace_by_window_id[win_id], win_id
+
+        prev_win_id = None
+        for tab in sorted(tabs, key=tab_sort_key):
+            win_id = tab['windowId']
+            if win_id != prev_win_id:
+                if prev_win_id is not None:
+                    input_lines.append(' ')
+                prev_win_id = win_id
+            ws_id = workspace_by_window_id[win_id]
             tab_id = tab['id']
             sound = '[sound] ' if tab['audible'] else ''
             title = tab['title']
             url = tab['url']
-            input_lines.append(f'{sound}{title} ({url})\t\t\t\t\t\t\t\t\t\t{tab_id}')
+            input_lines.append(f'{ws_id}  {sound}{title} ({url})\t\t\t\t\t\t\t\t\t\t{tab_id}')
 
         p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
         p.stdin.write(('\n'.join(input_lines) + '\n').encode('utf-8'))
@@ -156,9 +171,30 @@ class FirefoxTabController(object):
             if (name := node.get('name')) and identifier in name:
                 return node['id']
             for key in ['nodes', 'floating_nodes']:
-                if key in node and node[key] is not None:
-                    stack += node[key]
+                if nodes := node.get(key):
+                    stack += nodes
         return None
+
+    def _sway_get_firefox_workspaces_by_window_id(self):
+        stack = [self._sway_get_tree()]
+        window_id_by_con_id = {
+            c['con_id']: w
+            for w, c in self._browser_window_map.items()
+        }
+        workspace_by_window_id = {}
+        workspace_num = None
+        while stack:
+            node = stack.pop()
+            if node['id'] in window_id_by_con_id:
+                win_id = window_id_by_con_id[node['id']]
+                workspace_by_window_id[win_id] = workspace_num
+                continue
+            if node['type'] == 'workspace':
+                workspace_num = node.get('num')
+            for key in ['nodes', 'floating_nodes']:
+                if nodes := node.get(key):
+                    stack += nodes
+        return workspace_by_window_id
 
     def _sway_get_tree(self):
         p = subprocess.run(['swaymsg', '-t', 'get_tree'], stdout=subprocess.PIPE)
