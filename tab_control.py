@@ -8,7 +8,6 @@ import contextlib
 import socketserver
 import threading
 import traceback
-import uuid
 import subprocess
 
 
@@ -95,33 +94,31 @@ class FirefoxTabController(object):
             tabs = data['results']
             selected_tab = self._select_tab(tabs)
             if selected_tab:
-                focus_tab(selected_tab)
-        def focus_tab(selected_tab):
-            random_prefix = uuid.uuid4().hex
+                show_window_id_in_title(selected_tab)
+        def show_window_id_in_title(selected_tab):
             self._commander.command(
-                'focus_tab',
-                args={
-                    'windowId': selected_tab['windowId'],
-                    'tabId': selected_tab['id'],
-                    'randomPrefix': random_prefix
-                },
-                cb=lambda d: notify_finished(selected_tab, random_prefix, d)
+                'show_window_id_in_title',
+                args=selected_tab,
+                cb=lambda d: focus_tab(d, selected_tab)
             )
-        def notify_finished(selected_tab, random_prefix, data):
-            if data['results']['ok']:
-                window_id = selected_tab['windowId']
-                self._sway_focus_firefox_window(window_id, random_prefix)
+        def focus_tab(data, selected_tab):
+            identifier = data['results']['identifier']
+            if identifier:
+                self._sway_focus_firefox_window(identifier)
                 self._commander.command(
-                    'notify_window_focused',
-                    args={'id': data['id'],'windowId': window_id}
+                    'remove_window_id_from_title',
+                    args=selected_tab
+                )
+                self._commander.command(
+                    'focus_tab',
+                    args={'tab': selected_tab}
                 )
         get_tabs()
 
 
-    def _sway_focus_firefox_window(self, firefox_window_id, random_prefix):
+    def _sway_focus_firefox_window(self, identifier):
         # hack
-        patt = f'{random_prefix}:{firefox_window_id}'
-        subprocess.run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="{patt} "]', 'focus'], stdout=subprocess.DEVNULL)
+        subprocess.run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="{identifier} "]', 'focus'], stdout=subprocess.DEVNULL)
 
 
 class TabFocusServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):

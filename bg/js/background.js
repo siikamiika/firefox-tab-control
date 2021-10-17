@@ -25,7 +25,7 @@ class NativeMessagingServer {
 class TabControlBackend {
     constructor() {
         this._server = null;
-        this._previousPrefaceCache = {};
+        this._titlePrefaceCache = {};
     }
 
     start() {
@@ -38,7 +38,8 @@ class TabControlBackend {
         this._server.setCommandHandler('get_focused_window', this._onGetFocusedWindow.bind(this));
         this._server.setCommandHandler('get_tabs', this._onGetTabs.bind(this));
         this._server.setCommandHandler('focus_tab', this._onFocusTab.bind(this));
-        this._server.setCommandHandler('notify_window_focused', this._onNotifyWindowFocused.bind(this));
+        this._server.setCommandHandler('show_window_id_in_title', this._onShowWindowIdInTitle.bind(this));
+        this._server.setCommandHandler('remove_window_id_from_title', this._onRemoveWindowIdFromTitle.bind(this));
     }
 
     async _onGetFocusedWindow() {
@@ -49,20 +50,39 @@ class TabControlBackend {
         return await browser.tabs.query({});
     }
 
-    async _onFocusTab({id, args: {windowId, tabId, randomPrefix}}) {
-        const previousPreface = await this._guessPreviousPreface(windowId);
-        this._previousPrefaceCache[id] = previousPreface;
-        await browser.windows.update(windowId, {titlePreface: `${previousPreface}${randomPrefix}:${windowId} `});
-        browser.windows.update(windowId, {focused: true});
-        browser.tabs.update(tabId, {active: true});
+    async _onFocusTab({args: {tab}}) {
+        browser.windows.update(tab.windowId, {focused: true});
+        browser.tabs.update(tab.id, {active: true});
         return {ok: true};
     }
 
-    async _onNotifyWindowFocused({args: {id, windowId}}) {
-        const titlePreface = this._previousPrefaceCache[id];
-        if (typeof titlePreface === 'undefined') { return; }
-        delete this._previousPrefaceCache[id];
-        browser.windows.update(windowId, {titlePreface});
+    async _onShowWindowIdInTitle({args: {windowId}}) {
+        if (this._titlePrefaceCache[windowId]) {
+            const {previousPreface, identifier} = this._titlePrefaceCache[windowId];
+            await browser.windows.update(windowId, {titlePreface: `${previousPreface}${identifier} `});
+            return {identifier};
+        }
+        const randomString = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+            .map((v) => v.toString(16).padStart(2, '0'))
+            .join('');
+        const identifier = `${randomString}:${windowId}`;
+        let previousPreface = await this._guessPreviousPreface(windowId);
+        // some other call got here first, give up
+        if (this._titlePrefaceCache[windowId]) {
+            return {identifier: null};
+        }
+        this._titlePrefaceCache[windowId] = {previousPreface, identifier};
+        await browser.windows.update(windowId, {titlePreface: `${previousPreface}${identifier} `});
+        return {identifier};
+    }
+
+    async _onRemoveWindowIdFromTitle({args: {windowId}}) {
+        if (this._titlePrefaceCache[windowId]) {
+            const {previousPreface} = this._titlePrefaceCache[windowId];
+            await browser.windows.update(windowId, {titlePreface: previousPreface});
+            delete this._titlePrefaceCache[windowId];
+        }
+        return {ok: true};
     }
 
     async _guessPreviousPreface(windowId) {
