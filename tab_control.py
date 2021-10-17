@@ -4,6 +4,7 @@ import json
 import sys
 import struct
 import os
+import time
 import contextlib
 import socketserver
 import threading
@@ -77,6 +78,7 @@ class FirefoxTabController(object):
         self._commander.command('get_windows', cb=update_window_map)
 
     def _on_new_window(self, data):
+        time.sleep(1)
         window = data['results']
         self._identify_window(window['id'])
 
@@ -85,7 +87,7 @@ class FirefoxTabController(object):
         if window['id'] in self._browser_window_map:
             del self._browser_window_map[window['id']]
 
-    def _identify_window(self, window_id):
+    def _identify_window(self, window_id, attempts=1):
         def set_title_identifier():
             self._commander.command(
                 'identify_window',
@@ -95,9 +97,12 @@ class FirefoxTabController(object):
         def find_title_identifier(data):
             identifier = data['results']['identifier']
             con_id = self._sway_get_con_id_for_title_identifier(identifier)
+            cleanup()
             if con_id is not None:
                 self._browser_window_map[window_id] = {'con_id': con_id}
-            cleanup()
+            elif attempts < 5:
+                time.sleep(2)
+                self._identify_window(window_id, attempts + 1)
         def cleanup():
             self._commander.command(
                 'identify_window',
