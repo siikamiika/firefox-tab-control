@@ -106,15 +106,14 @@ class FirefoxTabController(object):
         set_title_identifier()
 
     def _select_tab(self, tabs):
-        input_lines = []
-
-        # TODO background
+        p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
         workspace_by_window_id = self._sway_get_firefox_workspaces_by_window_id()
 
         def tab_sort_key(tab):
             win_id = tab['windowId']
             return workspace_by_window_id[win_id], win_id
 
+        input_lines = []
         prev_win_id = None
         for tab in sorted(tabs, key=tab_sort_key):
             win_id = tab['windowId']
@@ -129,7 +128,6 @@ class FirefoxTabController(object):
             url = tab['url']
             input_lines.append(f'{ws_id}  {sound}{title} ({url})\t\t\t\t\t\t\t\t\t\t{tab_id}')
 
-        p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
         p.stdin.write(('\n'.join(input_lines) + '\n').encode('utf-8'))
         p.stdin.close()
         selected_tab = p.stdout.read()
