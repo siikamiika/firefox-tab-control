@@ -63,6 +63,16 @@ class FirefoxStandardStreamCommander:
 
 class FirefoxTabController(object):
 
+    _COLORS = [
+        (255, 0,   0),   (255, 255, 0),   (0,   234, 255),
+        (170, 0,   255), (255, 127, 0),   (191, 255, 0),
+        (0,   149, 255), (255, 0,   170), (255, 212, 0),
+        (106, 255, 0),   (0,   64,  255), (237, 185, 185),
+        (185, 215, 237), (231, 233, 185), (220, 185, 237),
+        (185, 237, 224), (143, 35,  35),  (35,  98,  143),
+        (143, 106, 35),  (107, 35,  143), (79,  143, 35),
+    ]
+
     def __init__(self, commander):
         self._commander = commander
 
@@ -112,26 +122,31 @@ class FirefoxTabController(object):
 
     def _select_tab(self, tabs):
         p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+
         workspace_by_window_id = self._sway_get_firefox_workspaces_by_window_id()
 
         def tab_sort_key(tab):
             win_id = tab['windowId']
-            return workspace_by_window_id[win_id], win_id
+            return workspace_by_window_id.get(win_id), win_id
 
         input_lines = []
+        win_counter = 0
         prev_win_id = None
         for tab in sorted(tabs, key=tab_sort_key):
             win_id = tab['windowId']
+            ws_id = workspace_by_window_id.get(win_id)
             if win_id != prev_win_id:
-                if prev_win_id is not None:
-                    input_lines.append(' ')
+                win_counter += 1
                 prev_win_id = win_id
-            ws_id = workspace_by_window_id[win_id]
-            tab_id = tab['id']
             sound = '[sound] ' if tab['audible'] else ''
             title = tab['title']
             url = tab['url']
-            input_lines.append(f'{ws_id}  {sound}{title} ({url})\t\t\t\t\t\t\t\t\t\t{tab_id}')
+            tab_id = tab['id']
+            color = self._COLORS[win_counter % 21]
+            win_counter_colored = self._ansi_bg_colored(f'{win_counter: >2}', *color)
+
+            line = f'{ws_id}  {win_counter_colored} {sound}{title} ({url})\t\t\t\t\t\t\t\t\t\t{tab_id}'
+            input_lines.append(line)
 
         p.stdin.write(('\n'.join(input_lines) + '\n').encode('utf-8'))
         p.stdin.close()
@@ -202,6 +217,9 @@ class FirefoxTabController(object):
     def _sway_get_tree(self):
         p = subprocess.run(['swaymsg', '-t', 'get_tree'], stdout=subprocess.PIPE)
         return json.loads(p.stdout)
+
+    def _ansi_bg_colored(self, text, r, g, b):
+        return "\033[48;2;{};{};{};38;2;0;0;0m {} \033[00m".format(r, g, b, text)
 
 
 
