@@ -88,7 +88,7 @@ class FirefoxTabController(object):
         self._commander.command('get_windows', cb=update_window_map)
 
     def _on_new_window(self, data):
-        time.sleep(1)
+        time.sleep(0.5)
         window = data['results']
         self._identify_window(window['id'])
 
@@ -97,7 +97,7 @@ class FirefoxTabController(object):
         if window['id'] in self._browser_window_map:
             del self._browser_window_map[window['id']]
 
-    def _identify_window(self, window_id, attempts=1):
+    def _identify_window(self, window_id, cb=None):
         def set_title_identifier():
             self._commander.command(
                 'identify_window',
@@ -107,34 +107,38 @@ class FirefoxTabController(object):
         def find_title_identifier(data):
             identifier = data['results']['identifier']
             con_id = self._sway_get_con_id_for_title_identifier(identifier)
-            cleanup()
             if con_id is not None:
                 self._browser_window_map[window_id] = {'con_id': con_id}
-            elif attempts < 5:
-                time.sleep(2)
-                self._identify_window(window_id, attempts + 1)
+            cleanup()
         def cleanup():
             self._commander.command(
                 'identify_window',
-                args={'windowId': window_id, 'on': False}
+                args={'windowId': window_id, 'on': False},
+                cb=cb or (lambda r: None)
             )
         set_title_identifier()
 
     def _select_tab(self, tabs):
+        for tab in tabs:
+            win_id = tab['windowId']
+            if win_id not in self._browser_window_map:
+                self._identify_window(win_id, lambda r: self._select_tab(tabs))
+                return
+
         p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
 
         workspace_by_window_id = self._sway_get_firefox_workspaces_by_window_id()
 
         def tab_sort_key(tab):
             win_id = tab['windowId']
-            return workspace_by_window_id.get(win_id), win_id
+            return workspace_by_window_id[win_id], win_id
 
         input_lines = []
         win_counter = 0
         prev_win_id = None
         for tab in sorted(tabs, key=tab_sort_key):
             win_id = tab['windowId']
-            ws_id = workspace_by_window_id.get(win_id)
+            ws_id = workspace_by_window_id[win_id]
             if win_id != prev_win_id:
                 win_counter += 1
                 prev_win_id = win_id
