@@ -73,17 +73,36 @@ class FirefoxTabController(object):
     def _update_all_windows(self):
         def update_window_map(data):
             for window in data['results']:
-                self._browser_window_map[window['id']] = window
+                self._identify_window(window['id'])
         self._commander.command('get_windows', cb=update_window_map)
 
     def _on_new_window(self, data):
         window = data['results']
-        self._browser_window_map[window['id']] = window
+        self._identify_window(window['id'])
 
     def _on_close_window(self, data):
         window = data['results']
         if window['id'] in self._browser_window_map:
             del self._browser_window_map[window['id']]
+
+    def _identify_window(self, window_id):
+        def set_title_identifier():
+            self._commander.command(
+                'identify_window',
+                args={'windowId': window_id, 'on': True},
+                cb=find_title_identifier
+            )
+        def find_title_identifier(data):
+            identifier = data['results']['identifier']
+            con_id = self._sway_get_con_id_for_title_identifier(identifier)
+            self._browser_window_map[window_id] = {'con_id': con_id}
+            cleanup()
+        def cleanup():
+            self._commander.command(
+                'identify_window',
+                args={'windowId': window_id, 'on': False}
+            )
+        set_title_identifier()
 
     def _select_tab(self, tabs):
         input_lines = []
@@ -115,31 +134,36 @@ class FirefoxTabController(object):
             tabs = data['results']
             selected_tab = self._select_tab(tabs)
             if selected_tab:
-                identify_window(selected_tab)
-        def identify_window(selected_tab):
+                focus_tab(selected_tab)
+        def focus_tab(selected_tab):
+            self._sway_focus_firefox_window(selected_tab['windowId'])
             self._commander.command(
-                'identify_window',
-                args={'windowId': selected_tab['windowId'], 'on': True},
-                cb=lambda d: focus_tab(d, selected_tab)
+                'focus_tab',
+                args={'tab': selected_tab}
             )
-        def focus_tab(data, selected_tab):
-            identifier = data['results']['identifier']
-            if identifier:
-                self._sway_focus_firefox_window(identifier)
-                self._commander.command(
-                    'identify_window',
-                    args={'windowId': selected_tab['windowId'], 'on': False}
-                )
-                self._commander.command(
-                    'focus_tab',
-                    args={'tab': selected_tab}
-                )
         get_tabs()
 
 
-    def _sway_focus_firefox_window(self, identifier):
-        # hack
-        subprocess.run(['swaymsg', f'[app_id="firefoxdeveloperedition" title="{identifier} "]', 'focus'], stdout=subprocess.DEVNULL)
+    def _sway_focus_firefox_window(self, window_id):
+        if window_id in self._browser_window_map:
+            con_id = self._browser_window_map[window_id]['con_id']
+            subprocess.run(['swaymsg', f'[con_id={con_id}]', 'focus'], stdout=subprocess.DEVNULL)
+
+    def _sway_get_con_id_for_title_identifier(self, identifier):
+        stack = [self._sway_get_tree()]
+        while stack:
+            node = stack.pop()
+            if (name := node.get('name')) and identifier in name:
+                return node['id']
+            for key in ['nodes', 'floating_nodes']:
+                if key in node and node[key] is not None:
+                    stack += node[key]
+        return None
+
+    def _sway_get_tree(self):
+        p = subprocess.run(['swaymsg', '-t', 'get_tree'], stdout=subprocess.PIPE)
+        return json.loads(p.stdout)
+
 
 
 class TabFocusServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):

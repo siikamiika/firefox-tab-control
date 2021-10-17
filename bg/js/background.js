@@ -46,7 +46,6 @@ class TabControlBackend {
     _setHandlers() {
         // commands
         this._server.setCommandHandler('get_windows', this._onGetWindows.bind(this));
-        this._server.setCommandHandler('get_focused_window', this._onGetFocusedWindow.bind(this));
         this._server.setCommandHandler('get_tabs', this._onGetTabs.bind(this));
         this._server.setCommandHandler('focus_tab', this._onFocusTab.bind(this));
         this._server.setCommandHandler('identify_window', this._onIdentifyWindow.bind(this));
@@ -57,10 +56,6 @@ class TabControlBackend {
 
     async _onGetWindows() {
         return await browser.windows.getAll();
-    }
-
-    async _onGetFocusedWindow() {
-        return await browser.windows.getLastFocused({});
     }
 
     async _onGetTabs() {
