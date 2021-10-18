@@ -93,10 +93,10 @@ class FirefoxTabController(object):
         def find_title_identifier(data):
             identifier = data['results']['identifier']
             con_id = self._sway_get_con_id_for_title_identifier(identifier)
+            cleanup()
             if con_id is not None:
                 self._browser_window_map[window_id] = {'con_id': con_id}
                 cb()
-            cleanup()
         def cleanup():
             self._commander.command(
                 'identify_window',
