@@ -95,20 +95,20 @@ class FirefoxTabController(object):
             con_id = self._sway_get_con_id_for_title_identifier(identifier)
             if con_id is not None:
                 self._browser_window_map[window_id] = {'con_id': con_id}
+                cb()
             cleanup()
         def cleanup():
             self._commander.command(
                 'identify_window',
-                args={'windowId': window_id, 'on': False},
-                cb=cb or (lambda r: None)
+                args={'windowId': window_id, 'on': False}
             )
         set_title_identifier()
 
     def _select_tab(self, tabs, cb):
         def chain(win_id, next_cb):
             if not next_cb:
-                next_cb = lambda r: self._select_tab(tabs, cb)
-            return lambda r: self._identify_window(win_id, next_cb)
+                next_cb = lambda: self._select_tab(tabs, cb)
+            return lambda: self._identify_window(win_id, next_cb)
         identify = None
         missing_win_ids = set()
         for tab in tabs:
@@ -119,7 +119,7 @@ class FirefoxTabController(object):
                 missing_win_ids.add(win_id)
                 identify = chain(win_id, identify)
         if identify:
-            identify(None)
+            identify()
             return
 
         p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
