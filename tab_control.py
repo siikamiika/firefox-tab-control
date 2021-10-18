@@ -104,12 +104,23 @@ class FirefoxTabController(object):
             )
         set_title_identifier()
 
-    def _select_tab(self, tabs):
+    def _select_tab(self, tabs, cb):
+        def chain(win_id, next_cb):
+            if not next_cb:
+                next_cb = lambda r: self._select_tab(tabs, cb)
+            return lambda r: self._identify_window(win_id, next_cb)
+        identify = None
+        missing_win_ids = set()
         for tab in tabs:
             win_id = tab['windowId']
+            if win_id in missing_win_ids:
+                continue
             if win_id not in self._browser_window_map:
-                self._identify_window(win_id, lambda r: self._select_tab(tabs))
-                return
+                missing_win_ids.add(win_id)
+                identify = chain(win_id, identify)
+        if identify:
+            identify(None)
+            return
 
         p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
 
@@ -144,9 +155,10 @@ class FirefoxTabController(object):
         p.wait()
         try:
             tab_id = int(selected_tab.split(b'\t')[-1])
-            return next((tab for tab in tabs if tab['id'] == tab_id), None)
+            res = next((tab for tab in tabs if tab['id'] == tab_id), None)
         except ValueError:
-            return None
+            res = None
+        cb(res)
 
 
     def focus_tab(self):
@@ -155,15 +167,14 @@ class FirefoxTabController(object):
             self._commander.command('get_tabs', cb=select_tab)
         def select_tab(data):
             tabs = data['results']
-            selected_tab = self._select_tab(tabs)
-            if selected_tab:
-                focus_tab(selected_tab)
+            self._select_tab(tabs, focus_tab)
         def focus_tab(selected_tab):
-            self._sway_focus_firefox_window(selected_tab['windowId'])
-            self._commander.command(
-                'focus_tab',
-                args={'tab': selected_tab}
-            )
+            if selected_tab:
+                self._sway_focus_firefox_window(selected_tab['windowId'])
+                self._commander.command(
+                    'focus_tab',
+                    args={'tab': selected_tab}
+                )
         get_tabs()
 
 
