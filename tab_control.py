@@ -125,10 +125,11 @@ class FirefoxTabController(object):
         p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
 
         workspace_by_window_id = self._sway_get_firefox_workspaces_by_window_id()
+        window_id_order = list(workspace_by_window_id.keys())
 
         def tab_sort_key(tab):
             win_id = tab['windowId']
-            return workspace_by_window_id[win_id], win_id
+            return workspace_by_window_id[win_id], -window_id_order.index(win_id)
 
         input_lines = []
         win_counter = 0
