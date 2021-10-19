@@ -125,11 +125,11 @@ class FirefoxTabController(object):
         p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
 
         workspace_by_window_id = self._sway_get_firefox_workspaces_by_window_id()
-        window_id_order = list(workspace_by_window_id.keys())
+        window_id_order = {w: i for i, w in enumerate(workspace_by_window_id.keys())}
 
         def tab_sort_key(tab):
             win_id = tab['windowId']
-            return workspace_by_window_id[win_id], -window_id_order.index(win_id)
+            return workspace_by_window_id[win_id], window_id_order[win_id]
 
         input_lines = []
         win_counter = 0
@@ -193,7 +193,7 @@ class FirefoxTabController(object):
                 return node['id']
             for key in ['nodes', 'floating_nodes']:
                 if nodes := node.get(key):
-                    stack += nodes
+                    stack += [*reversed(nodes)]
         return None
 
     def _sway_get_firefox_workspaces_by_window_id(self):
@@ -214,7 +214,7 @@ class FirefoxTabController(object):
                 workspace_num = node.get('num')
             for key in ['nodes', 'floating_nodes']:
                 if nodes := node.get(key):
-                    stack += nodes
+                    stack += [*reversed(nodes)]
         return workspace_by_window_id
 
     def _sway_get_tree(self):
