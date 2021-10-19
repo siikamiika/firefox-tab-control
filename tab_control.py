@@ -147,7 +147,8 @@ class FirefoxTabController(object):
             color = self._COLORS[win_counter % 21]
             win_counter_colored = self._ansi_bg_colored(f'{win_counter: >2}', *color)
 
-            line = f'{ws_id}  {win_counter_colored} {sound}{title} ({url})\t\t\t\t\t\t\t\t\t\t{tab_id}'
+            separator = '\t' * 30
+            line = f'{ws_id}  {win_counter_colored} {sound}{title} ({url}){separator}{tab_id}'
             input_lines.append(line)
 
         p.stdin.write(('\n'.join(input_lines) + '\n').encode('utf-8'))
