@@ -52,6 +52,7 @@ class TabControlBackend {
         // subscriptions
         this._server.setSubscribeHandler('subscribe_new_window', this._onSubscribeNewWindow.bind(this));
         this._server.setSubscribeHandler('subscribe_close_window', this._onSubscribeCloseWindow.bind(this));
+        this._server.setSubscribeHandler('subscribe_focus_window', this._onSubscribeFocusWindow.bind(this));
     }
 
     async _onGetWindows() {
@@ -113,6 +114,10 @@ class TabControlBackend {
 
     _onSubscribeCloseWindow(_, postMessageChannel) {
         browser.windows.onRemoved.addListener((id) => postMessageChannel({id}));
+    }
+
+    _onSubscribeFocusWindow(_, postMessageChannel) {
+        browser.windows.onFocusChanged.addListener((id) => postMessageChannel({id}));
     }
 }
 

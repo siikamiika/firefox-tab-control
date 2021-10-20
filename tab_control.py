@@ -76,12 +76,19 @@ class FirefoxTabController(object):
         self._commander = commander
 
         self._browser_window_map = {}
+        self._current_window = None
         self._commander.command('subscribe_close_window', cb=self._on_close_window)
+        self._commander.command('subscribe_focus_window', cb=self._on_focus_window)
 
     def _on_close_window(self, data):
         window = data['results']
         if window['id'] in self._browser_window_map:
             del self._browser_window_map[window['id']]
+
+    def _on_focus_window(self, data):
+        window = data['results']
+        if window['id'] in self._browser_window_map:
+            self._current_window = window['id']
 
     def _identify_window(self, window_id, cb=None):
         def set_title_identifier():
@@ -122,8 +129,6 @@ class FirefoxTabController(object):
             identify()
             return
 
-        p = subprocess.Popen(os.getenv('DMENU'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-
         workspace_by_window_id = self._sway_get_firefox_workspaces_by_window_id()
         window_id_order = {w: i for i, w in enumerate(workspace_by_window_id.keys())}
 
@@ -134,8 +139,11 @@ class FirefoxTabController(object):
         input_lines = []
         win_counter = 0
         prev_win_id = None
-        for tab in sorted(tabs, key=tab_sort_key):
+        current_idx = None
+        for i, tab in enumerate(sorted(tabs, key=tab_sort_key)):
             win_id = tab['windowId']
+            if win_id == self._current_window and tab['active']:
+                current_idx = i
             ws_id = workspace_by_window_id[win_id]
             if win_id != prev_win_id:
                 win_counter += 1
@@ -151,6 +159,16 @@ class FirefoxTabController(object):
             line = f'{ws_id}  {win_counter_colored} {sound}{title} ({url}){separator}{tab_id}'
             input_lines.append(line)
 
+        dmenu = os.getenv('DMENU')
+        if not dmenu:
+            return
+        p = subprocess.Popen(
+            dmenu,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            shell=True,
+            env={**os.environ, 'START_INDEX': str(current_idx)}
+        )
         p.stdin.write(('\n'.join(input_lines) + '\n').encode('utf-8'))
         p.stdin.close()
         selected_tab = p.stdout.read()
