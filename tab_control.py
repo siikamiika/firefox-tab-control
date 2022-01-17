@@ -134,7 +134,12 @@ class FirefoxTabController(object):
 
         def tab_sort_key(tab):
             win_id = tab['windowId']
-            return workspace_by_window_id[win_id], window_id_order[win_id]
+            def _num_or_max(n):
+                return n if n is not None else 2 ** 32 - 1
+            return (
+                _num_or_max(workspace_by_window_id[win_id]),
+                _num_or_max(window_id_order[win_id])
+            )
 
         input_lines = []
         win_counter = 0
@@ -145,6 +150,8 @@ class FirefoxTabController(object):
             if win_id == self._current_window and tab['active']:
                 current_idx = i
             ws_id = workspace_by_window_id[win_id]
+            if ws_id is None:
+                ws_id = 'S' # scratchpad
             if win_id != prev_win_id:
                 win_counter += 1
                 prev_win_id = win_id
